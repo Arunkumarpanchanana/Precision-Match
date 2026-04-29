@@ -560,7 +560,6 @@
 
     const safeTitle = (lastInputs.jobTitle || 'job').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
     doc.save('rolealign-' + safeTitle + '-' + Date.now() + '.pdf');
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAdEBbJ2mAPdEussssDitdxPg7sHMF50Tn3ouOR5FzdgAZ7q1fcCkjky6Nh8YIz2cq/exec';
   });
 </script>
 
