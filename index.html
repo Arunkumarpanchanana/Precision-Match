@@ -1,1 +1,568 @@
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAdEBbJ2mAPdEussssDitdxPg7sHMF50Tn3ouOR5FzdgAZ7q1fcCkjky6Nh8YIz2cq/exec';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoleAlign · Job-Fit Checker</title>
+<meta name="description" content="Paste your resume and a job description. RoleAlign tells you how well you match.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  /* ===== Hub-matched design tokens ===== */
+  :root {
+    --bg:#0B1F3A;--surface:#111827;--surface-2:#0F1F36;
+    --border:#1F2937;--border-strong:#2A3548;
+    --text:#E5E7EB;--text-2:#CBD5E1;--muted:#9CA3AF;--muted-2:#6B7280;
+    --white:#FFFFFF;--accent:#2563EB;--accent-hover:#3B82F6;
+    --green:#10B981;--amber:#F59E0B;--red:#EF4444;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);
+       line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent)}
+  a:hover{color:var(--accent-hover)}
+  .container{max-width:900px;margin:0 auto;padding:0 20px}
+
+  /* Header — matches hub */
+  .site-header{border-bottom:1px solid var(--border);padding:15px 0;background:var(--bg)}
+  .nav-wrap{display:flex;justify-content:space-between;align-items:center;
+            flex-wrap:wrap;gap:12px}
+  .logo{font-size:1.1rem;font-weight:700;color:var(--white);
+        text-decoration:none;letter-spacing:0.3px}
+  .logo:hover{color:var(--accent-hover)}
+  .nav a{margin-left:15px;text-decoration:none;color:var(--muted);font-size:0.95rem}
+  .nav a.active,.nav a:hover{color:var(--accent)}
+  .nav a:first-child{margin-left:0}
+
+  .tool-bar{border-bottom:1px solid var(--border);padding:12px 0;background:var(--surface-2)}
+  .tool-bar-inner{display:flex;justify-content:space-between;align-items:center;
+                  flex-wrap:wrap;gap:12px;font-size:0.85rem}
+  .tool-name{color:var(--text-2);font-weight:600;letter-spacing:0.02em}
+
+  main{padding:40px 0 80px}
+  .page-header{margin-bottom:32px}
+  .page-header h1{font-size:32px;font-weight:700;letter-spacing:-0.02em;
+                  line-height:1.2;color:var(--white);margin:0 0 12px}
+  .page-header p{color:var(--text-2);font-size:16px;margin:0;max-width:600px}
+
+  /* Form */
+  .form-card{background:var(--surface);border:1px solid var(--border);
+             border-radius:10px;padding:28px}
+  .field{margin-bottom:20px}
+  .field label{display:block;font-size:13px;font-weight:600;
+               color:var(--text-2);margin-bottom:8px;letter-spacing:0.01em}
+  .field .hint{color:var(--muted);font-weight:400;font-size:12px;margin-left:6px}
+  .field input[type="text"],.field textarea{
+    width:100%;background:var(--bg);color:var(--text);
+    border:1px solid var(--border);border-radius:8px;
+    padding:12px 14px;font:400 14px var(--font);
+    transition:border-color 0.15s,box-shadow 0.15s;resize:vertical}
+  .field input[type="text"]:focus,.field textarea:focus{
+    outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(37,99,235,0.18)}
+  .field textarea{min-height:140px;font-family:var(--mono);font-size:13px;line-height:1.55}
+  .field .char-count{color:var(--muted-2);font-size:11px;margin-top:4px;text-align:right;
+                     font-variant-numeric:tabular-nums}
+  .field .char-count.over{color:var(--red)}
+
+  .disclaimer{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);
+              border-radius:8px;padding:14px 16px;margin:20px 0;font-size:13px;
+              color:var(--text-2);line-height:1.55}
+  .disclaimer strong{color:var(--amber)}
+  .checkbox-row{display:flex;align-items:flex-start;gap:10px;margin:16px 0;
+                font-size:13px;color:var(--text-2)}
+  .checkbox-row input[type="checkbox"]{margin-top:3px;cursor:pointer;
+                                        width:16px;height:16px;flex-shrink:0;accent-color:var(--accent)}
+  .checkbox-row label{cursor:pointer;line-height:1.5}
+
+  .submit-btn{display:inline-block;background:var(--accent);color:var(--white);
+              border:none;border-radius:6px;padding:12px 20px;
+              font:600 14px var(--font);cursor:pointer;
+              transition:background 0.15s,transform 0.05s,opacity 0.15s}
+  .submit-btn:hover:not(:disabled){background:var(--accent-hover)}
+  .submit-btn:active:not(:disabled){transform:scale(0.98)}
+  .submit-btn:disabled{opacity:0.5;cursor:not-allowed}
+
+  /* Loading state */
+  .loading{display:flex;align-items:center;gap:12px;color:var(--muted);
+           font-size:14px;margin-top:24px}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);
+           border-top-color:var(--accent);border-radius:50%;
+           animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Errors */
+  .error-box{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
+             border-radius:8px;padding:14px 16px;margin-top:16px;
+             font-size:13px;color:#FCA5A5}
+  .error-box strong{color:var(--red)}
+
+  /* Results */
+  .results{display:none;margin-top:32px}
+  .results.visible{display:block}
+  .score-card{background:var(--surface);border:1px solid var(--border);
+              border-radius:10px;padding:28px;margin-bottom:20px;
+              display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center}
+  .score-circle{width:120px;height:120px;border-radius:50%;
+                display:grid;place-items:center;
+                font-size:36px;font-weight:700;color:var(--white);
+                font-variant-numeric:tabular-nums;line-height:1}
+  .score-circle.fit-strong{background:linear-gradient(135deg,#10B981,#059669);
+                           box-shadow:0 0 28px rgba(16,185,129,0.3)}
+  .score-circle.fit-possible{background:linear-gradient(135deg,#F59E0B,#D97706);
+                             box-shadow:0 0 28px rgba(245,158,11,0.3)}
+  .score-circle.fit-weak{background:linear-gradient(135deg,#EF4444,#DC2626);
+                         box-shadow:0 0 28px rgba(239,68,68,0.3)}
+  .score-meta{min-width:0}
+  .verdict-label{font-size:11px;font-weight:600;letter-spacing:0.1em;
+                 text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .verdict{font-size:24px;font-weight:700;color:var(--white);margin:0 0 6px;
+           letter-spacing:-0.01em}
+  .verdict-sub{color:var(--text-2);font-size:14px;margin:0}
+
+  .result-section{background:var(--surface);border:1px solid var(--border);
+                  border-radius:10px;padding:24px;margin-bottom:16px}
+  .result-section h3{font-size:13px;font-weight:600;text-transform:uppercase;
+                     letter-spacing:0.08em;color:var(--accent);margin:0 0 14px}
+  .result-section ul{margin:0;padding:0;list-style:none}
+  .result-section li{padding:10px 0 10px 28px;border-bottom:1px solid var(--border);
+                     position:relative;color:var(--text);font-size:14px;line-height:1.55}
+  .result-section li:last-child{border-bottom:0}
+  .result-section li::before{position:absolute;left:0;top:10px;
+                             font-size:14px;font-weight:600}
+  .strengths li::before{content:"✓";color:var(--green)}
+  .gaps li::before{content:"✗";color:var(--red)}
+  .suggestions li::before{content:"→";color:var(--accent)}
+  .keywords-list{display:flex;flex-wrap:wrap;gap:8px}
+  .keyword-chip{background:var(--bg);border:1px solid var(--border-strong);
+                color:var(--text-2);padding:5px 12px;border-radius:999px;
+                font-size:12px;font-family:var(--mono)}
+
+  .actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+  .btn-secondary{display:inline-block;background:var(--surface);color:var(--text);
+                 border:1px solid var(--border-strong);border-radius:6px;
+                 padding:10px 16px;font:500 14px var(--font);cursor:pointer;
+                 text-decoration:none;transition:all 0.15s}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* Footer */
+  .footer{text-align:center;padding:24px 20px;margin-top:40px;
+          border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+  .footer p{margin:4px 0}
+  .footer a{color:var(--text-2);text-decoration:none}
+  .footer a:hover{color:var(--accent)}
+
+  @media (max-width:600px){
+    .nav a{margin-left:12px;font-size:0.9rem}
+    .page-header h1{font-size:26px}
+    .score-card{grid-template-columns:1fr;text-align:center;justify-items:center}
+    .form-card{padding:20px}
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav-wrap">
+    <a href="https://arunkumarpanchanana.github.io/" class="logo">Arunkumar Panchanana</a>
+    <nav class="nav">
+      <a href="https://arunkumarpanchanana.github.io/">Home</a>
+      <a href="https://arunkumarpanchanana.github.io/about.html">About</a>
+      <a href="https://arunkumarpanchanana.github.io/tools.html" class="active">Tools</a>
+    </nav>
+  </div>
+</header>
+
+<div class="tool-bar">
+  <div class="container tool-bar-inner">
+    <span class="tool-name">RoleAlign · Job-Fit Checker</span>
+    <span></span>
+  </div>
+</div>
+
+<main>
+  <div class="container">
+
+    <header class="page-header">
+      <h1>Are you a fit for this role?</h1>
+      <p>Paste your resume and the job description. Get an honest, structured analysis of how well you match — strengths, gaps, missing keywords, and tailored next steps.</p>
+    </header>
+
+    <form id="roleAlignForm" class="form-card">
+      <div class="field">
+        <label for="jobTitle">Job title <span class="hint">required</span></label>
+        <input type="text" id="jobTitle" name="jobTitle"
+               placeholder="e.g., Senior Backend Engineer, Product Manager" required maxlength="120">
+      </div>
+
+      <div class="field">
+        <label for="jobDescription">Job description <span class="hint">required · paste the full posting</span></label>
+        <textarea id="jobDescription" name="jobDescription"
+                  placeholder="Paste the full job description here, including responsibilities, requirements, and qualifications…"
+                  required></textarea>
+        <div class="char-count" id="jdCount">0 / 15,000</div>
+      </div>
+
+      <div class="field">
+        <label for="resume">Your resume <span class="hint">required · paste the full text</span></label>
+        <textarea id="resume" name="resume"
+                  placeholder="Paste your resume text here. Include your work experience, skills, education, and any relevant details…"
+                  required></textarea>
+        <div class="char-count" id="resumeCount">0 / 15,000</div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>⚠ Privacy notice.</strong> Your inputs are sent to Google's Gemini API for analysis.
+        On the free tier Google may use submitted data to improve their models.
+        <strong>Do not paste sensitive personal information</strong> (passport numbers, government IDs, addresses, financial data, etc.).
+        Results are not stored on this site after you close the page.
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="consent" required>
+        <label for="consent">
+          I understand my pasted data is sent to Google's free Gemini API and may be used to improve their models. I have removed any sensitive personal details I don't want shared.
+        </label>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">Analyze fit</button>
+
+      <div class="loading" id="loadingMsg" style="display:none">
+        <span class="spinner"></span>
+        <span>Analyzing — this usually takes 10–20 seconds…</span>
+      </div>
+
+      <div class="error-box" id="errorBox" style="display:none"></div>
+    </form>
+
+    <section class="results" id="results">
+      <div class="score-card">
+        <div class="score-circle" id="scoreCircle">—</div>
+        <div class="score-meta">
+          <div class="verdict-label">Verdict</div>
+          <h2 class="verdict" id="verdict">—</h2>
+          <p class="verdict-sub" id="verdictSub">—</p>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <h3>What's working in your favor</h3>
+        <ul class="strengths" id="strengthsList"></ul>
+      </div>
+
+      <div class="result-section">
+        <h3>Where you're light</h3>
+        <ul class="gaps" id="gapsList"></ul>
+      </div>
+
+      <div class="result-section">
+        <h3>Missing keywords from the JD</h3>
+        <div class="keywords-list" id="keywordsList"></div>
+      </div>
+
+      <div class="result-section">
+        <h3>Tailored next steps</h3>
+        <ul class="suggestions" id="suggestionsList"></ul>
+      </div>
+
+      <div class="actions-row">
+        <button type="button" class="submit-btn" id="downloadPdfBtn">Download PDF report</button>
+        <button type="button" class="btn-secondary" id="newAnalysisBtn">Start a new analysis</button>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>Arunkumar Panchanana &middot; AI tools &middot; Automation &middot; IT Leadership</p>
+    <p>Email: <a href="mailto:arunkumar.panchanana@gmail.com">arunkumar.panchanana@gmail.com</a></p>
+    <p style="margin-top:8px;font-size:11px;color:var(--muted-2)">RoleAlign analyses are AI-generated. Results are guidance, not gospel — apply with judgment.</p>
+  </div>
+</footer>
+
+<script>
+  // ---- IMPORTANT: replace this with your Apps Script Web App URL after deploying ----
+  const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+  // -------------------------------------------------------------------------------
+
+  const MAX_LEN = 15000;
+
+  const form = document.getElementById('roleAlignForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const loadingMsg = document.getElementById('loadingMsg');
+  const errorBox = document.getElementById('errorBox');
+  const results = document.getElementById('results');
+
+  // Character counters
+  function bindCharCount(textareaId, counterId) {
+    const ta = document.getElementById(textareaId);
+    const counter = document.getElementById(counterId);
+    function update() {
+      const n = ta.value.length;
+      counter.textContent = n.toLocaleString() + ' / ' + MAX_LEN.toLocaleString();
+      counter.classList.toggle('over', n > MAX_LEN);
+    }
+    ta.addEventListener('input', update);
+    update();
+  }
+  bindCharCount('jobDescription', 'jdCount');
+  bindCharCount('resume', 'resumeCount');
+
+  let lastResult = null;
+  let lastInputs = null;
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    results.classList.remove('visible');
+
+    const jobTitle = document.getElementById('jobTitle').value.trim();
+    const jobDescription = document.getElementById('jobDescription').value.trim();
+    const resume = document.getElementById('resume').value.trim();
+    const consent = document.getElementById('consent').checked;
+
+    if (!jobTitle || !jobDescription || !resume) {
+      showError('Please fill in all three fields.');
+      return;
+    }
+    if (!consent) {
+      showError('Please confirm you have read the privacy notice.');
+      return;
+    }
+    if (jobDescription.length > MAX_LEN || resume.length > MAX_LEN) {
+      showError('One of your inputs is over the ' + MAX_LEN.toLocaleString() + ' character limit. Please trim it down.');
+      return;
+    }
+    if (APPS_SCRIPT_URL.indexOf('PASTE_YOUR') !== -1) {
+      showError('This site is not yet configured. The Apps Script Web App URL is missing.');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    loadingMsg.style.display = 'flex';
+
+    try {
+      // Apps Script web apps quirk: send as text/plain to avoid CORS preflight,
+      // and pass the JSON in the body.
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ jobTitle, jobDescription, resume }),
+      });
+      if (!response.ok) {
+        throw new Error('Server returned status ' + response.status);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      lastResult = data;
+      lastInputs = { jobTitle, jobDescription };
+      renderResults(data, jobTitle);
+    } catch (err) {
+      showError(err.message || 'Something went wrong. Try again in a moment.');
+    } finally {
+      submitBtn.disabled = false;
+      loadingMsg.style.display = 'none';
+    }
+  });
+
+  function showError(msg) {
+    errorBox.innerHTML = '<strong>Error:</strong> ' + escapeHtml(msg);
+    errorBox.style.display = 'block';
+  }
+
+  function renderResults(d, jobTitle) {
+    const score = clampScore(d.score);
+    const tier = scoreTier(score);
+    const circle = document.getElementById('scoreCircle');
+    circle.textContent = score;
+    circle.className = 'score-circle ' + tier.className;
+
+    document.getElementById('verdict').textContent = d.verdict || tier.defaultVerdict;
+    document.getElementById('verdictSub').textContent =
+      d.verdict_explanation || ('Score ' + score + ' / 100 against the requirements for "' + jobTitle + '".');
+
+    fillList('strengthsList', d.strengths || [], 'No clear strengths surfaced — consider rephrasing your resume to align with the JD.');
+    fillList('gapsList', d.gaps || [], 'No major gaps detected.');
+    fillList('suggestionsList', d.suggestions || [], 'No specific suggestions — the analysis was inconclusive.');
+
+    const kw = document.getElementById('keywordsList');
+    kw.innerHTML = '';
+    const keywords = (d.missing_keywords || []).slice(0, 30);
+    if (keywords.length === 0) {
+      kw.innerHTML = '<span style="color:var(--muted);font-size:13px">No major keyword gaps detected.</span>';
+    } else {
+      keywords.forEach(k => {
+        const chip = document.createElement('span');
+        chip.className = 'keyword-chip';
+        chip.textContent = k;
+        kw.appendChild(chip);
+      });
+    }
+
+    results.classList.add('visible');
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function fillList(id, items, emptyMsg) {
+    const ul = document.getElementById(id);
+    ul.innerHTML = '';
+    if (!items || items.length === 0) {
+      const li = document.createElement('li');
+      li.textContent = emptyMsg;
+      li.style.color = 'var(--muted)';
+      li.style.fontStyle = 'italic';
+      li.style.paddingLeft = '0';
+      ul.appendChild(li);
+      return;
+    }
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      ul.appendChild(li);
+    });
+  }
+
+  function clampScore(s) {
+    const n = parseInt(s, 10);
+    if (isNaN(n)) return 0;
+    return Math.max(0, Math.min(100, n));
+  }
+
+  function scoreTier(score) {
+    if (score >= 75) return { className: 'fit-strong', defaultVerdict: 'Strong fit' };
+    if (score >= 50) return { className: 'fit-possible', defaultVerdict: 'Possible fit' };
+    return { className: 'fit-weak', defaultVerdict: 'Weak fit' };
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // --- New analysis button: clear and scroll up ---
+  document.getElementById('newAnalysisBtn').addEventListener('click', function() {
+    form.reset();
+    document.getElementById('jdCount').textContent = '0 / 15,000';
+    document.getElementById('resumeCount').textContent = '0 / 15,000';
+    results.classList.remove('visible');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // --- PDF download ---
+  document.getElementById('downloadPdfBtn').addEventListener('click', function() {
+    if (!lastResult || !lastInputs) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 54;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+
+    function ensureSpace(h) {
+      if (y + h > pageH - margin) { doc.addPage(); y = margin; }
+    }
+    function setFont(size, weight) {
+      doc.setFont('helvetica', weight || 'normal');
+      doc.setFontSize(size);
+    }
+    function writeText(text, opts) {
+      opts = opts || {};
+      const lines = doc.splitTextToSize(text, maxW);
+      const lineH = (opts.size || 11) * 1.35;
+      lines.forEach(line => {
+        ensureSpace(lineH);
+        doc.text(line, margin, y);
+        y += lineH;
+      });
+    }
+    function spacer(h) { y += h; }
+    function divider() {
+      ensureSpace(10);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 14;
+    }
+
+    // Header
+    setFont(18, 'bold');
+    doc.setTextColor(11, 31, 58);
+    writeText('RoleAlign — Job-Fit Report');
+    spacer(2);
+    setFont(10, 'normal');
+    doc.setTextColor(120);
+    writeText(new Date().toLocaleString());
+    spacer(8);
+
+    // Job + score
+    setFont(13, 'bold');
+    doc.setTextColor(11, 31, 58);
+    writeText('Role: ' + lastInputs.jobTitle);
+    spacer(4);
+    setFont(28, 'bold');
+    const tier = scoreTier(clampScore(lastResult.score));
+    if (tier.className === 'fit-strong') doc.setTextColor(16, 185, 129);
+    else if (tier.className === 'fit-possible') doc.setTextColor(217, 119, 6);
+    else doc.setTextColor(220, 38, 38);
+    writeText(clampScore(lastResult.score) + ' / 100  ·  ' + (lastResult.verdict || tier.defaultVerdict));
+    spacer(4);
+    setFont(11, 'normal');
+    doc.setTextColor(60);
+    if (lastResult.verdict_explanation) writeText(lastResult.verdict_explanation);
+    spacer(6);
+    divider();
+
+    function section(title, items, prefix) {
+      setFont(12, 'bold');
+      doc.setTextColor(37, 99, 235);
+      writeText(title.toUpperCase());
+      spacer(2);
+      setFont(11, 'normal');
+      doc.setTextColor(40);
+      if (!items || items.length === 0) {
+        doc.setTextColor(150);
+        writeText('(none)');
+      } else {
+        items.forEach(item => {
+          writeText(prefix + ' ' + item);
+          spacer(2);
+        });
+      }
+      spacer(6);
+    }
+    section("What's working in your favor", lastResult.strengths, '✓');
+    section("Where you're light",            lastResult.gaps,      '✗');
+    section('Tailored next steps',           lastResult.suggestions, '→');
+
+    // Keywords
+    if (lastResult.missing_keywords && lastResult.missing_keywords.length > 0) {
+      setFont(12, 'bold');
+      doc.setTextColor(37, 99, 235);
+      writeText('MISSING KEYWORDS FROM THE JD');
+      spacer(2);
+      setFont(11, 'normal');
+      doc.setTextColor(40);
+      writeText(lastResult.missing_keywords.slice(0, 30).join(' · '));
+      spacer(6);
+    }
+
+    // Footer
+    divider();
+    setFont(9, 'italic');
+    doc.setTextColor(140);
+    writeText('Generated by RoleAlign at arunkumarpanchanana.github.io/role-align — analyses are AI-generated guidance, not gospel.');
+
+    const safeTitle = (lastInputs.jobTitle || 'job').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+    doc.save('rolealign-' + safeTitle + '-' + Date.now() + '.pdf');
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAdEBbJ2mAPdEussssDitdxPg7sHMF50Tn3ouOR5FzdgAZ7q1fcCkjky6Nh8YIz2cq/exec';
+  });
+</script>
+
+</body>
+</html>
