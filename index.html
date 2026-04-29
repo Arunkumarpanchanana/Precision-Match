@@ -11,8 +11,8 @@
   :root {
     --bg:#0B1F3A;--surface:#111827;--surface-2:#0F1F36;
     --border:#1F2937;--border-strong:#2A3548;
-    --text:#E5E7EB;--text-2:#CBD5E1;--muted:#9CA3AF;--muted-2:#6B7280;
-    --white:#FFFFFF;--accent:#2563EB;--accent-hover:#3B82F6;
+    --text:#F3F4F6;--text-2:#E5E7EB;--muted:#B0B7C2;--muted-2:#7B8494;
+    --white:#FFFFFF;--accent:#3B82F6;--accent-hover:#60A5FA;
     --green:#10B981;--amber:#F59E0B;--red:#EF4444;
     --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;
     --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
@@ -126,8 +126,8 @@
   .result-section h3{font-size:13px;font-weight:600;text-transform:uppercase;
                      letter-spacing:0.08em;color:var(--accent);margin:0 0 14px}
   .result-section ul{margin:0;padding:0;list-style:none}
-  .result-section li{padding:10px 0 10px 28px;border-bottom:1px solid var(--border);
-                     position:relative;color:var(--text);font-size:14px;line-height:1.55}
+  .result-section li{padding:12px 0 12px 28px;border-bottom:1px solid var(--border);
+                     position:relative;color:var(--text);font-size:14.5px;line-height:1.6}
   .result-section li:last-child{border-bottom:0}
   .result-section li::before{position:absolute;left:0;top:10px;
                              font-size:14px;font-weight:600}
@@ -461,105 +461,213 @@
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 54;
-    const maxW = pageW - margin * 2;
-    let y = margin;
+    const M = 56;                       // page margin
+    const contentW = pageW - M * 2;
+    let y = M;
+
+    // jsPDF's built-in Helvetica only handles Latin-1. Strip non-Latin chars
+    // and replace em/en dashes, smart quotes, and bullets with ASCII.
+    function safeText(s) {
+      return String(s == null ? '' : s)
+        .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+        .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/[\u2022\u2023\u25E6]/g, '*')
+        .replace(/[\u2026]/g, '...')
+        .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '');  // drop other non-ASCII
+    }
 
     function ensureSpace(h) {
-      if (y + h > pageH - margin) { doc.addPage(); y = margin; }
+      if (y + h > pageH - M - 30) { doc.addPage(); y = M; }
     }
     function setFont(size, weight) {
       doc.setFont('helvetica', weight || 'normal');
       doc.setFontSize(size);
     }
-    function writeText(text, opts) {
-      opts = opts || {};
-      const lines = doc.splitTextToSize(text, maxW);
-      const lineH = (opts.size || 11) * 1.35;
+    function setColor(r, g, b) { doc.setTextColor(r, g, b); }
+    function writeWrapped(text, size) {
+      // Always pass current font size for accurate line height.
+      const lines = doc.splitTextToSize(safeText(text), contentW);
+      const lineH = size * 1.35;
       lines.forEach(line => {
         ensureSpace(lineH);
-        doc.text(line, margin, y);
+        doc.text(line, M, y);
         y += lineH;
       });
     }
+    function writeIndented(text, size, indent, prefix, prefixColor) {
+      const innerW = contentW - indent;
+      const fullText = safeText(text);
+      const lines = doc.splitTextToSize(fullText, innerW);
+      const lineH = size * 1.4;
+      lines.forEach((line, idx) => {
+        ensureSpace(lineH);
+        if (idx === 0 && prefix) {
+          // Draw prefix in its color, then text in body color.
+          const prevColor = doc.getTextColor();
+          if (prefixColor) doc.setTextColor.apply(doc, prefixColor);
+          doc.text(prefix, M, y);
+          // Restore color for the body text.
+          doc.setTextColor(60);
+          doc.text(line, M + indent, y);
+        } else {
+          doc.text(line, M + indent, y);
+        }
+        y += lineH;
+      });
+    }
+    function divider(color) {
+      ensureSpace(12);
+      const c = color || [220, 220, 220];
+      doc.setDrawColor.apply(doc, c);
+      doc.setLineWidth(0.5);
+      doc.line(M, y, pageW - M, y);
+      y += 16;
+    }
     function spacer(h) { y += h; }
-    function divider() {
-      ensureSpace(10);
-      doc.setDrawColor(220);
-      doc.line(margin, y, pageW - margin, y);
+    function colorBar(r, g, b, h) {
+      h = h || 6;
+      ensureSpace(h + 4);
+      doc.setFillColor(r, g, b);
+      doc.rect(M, y, contentW, h, 'F');
+      y += h + 12;
+    }
+
+    // ===== HEADER BAND =====
+    doc.setFillColor(11, 31, 58);             // navy
+    doc.rect(0, 0, pageW, 80, 'F');
+    setFont(20, 'bold');
+    setColor(255, 255, 255);
+    doc.text('RoleAlign', M, 36);
+    setFont(11, 'normal');
+    setColor(180, 200, 230);
+    doc.text('Job-Fit Report', M, 56);
+    setFont(9, 'normal');
+    setColor(150, 170, 200);
+    const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    doc.text(dateStr, pageW - M, 36, { align: 'right' });
+    doc.text(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), pageW - M, 52, { align: 'right' });
+
+    y = 110;
+
+    // ===== ROLE BLOCK =====
+    setFont(10, 'bold');
+    setColor(120, 130, 150);
+    doc.text('ROLE', M, y);
+    y += 14;
+    setFont(15, 'bold');
+    setColor(20, 30, 50);
+    writeWrapped(lastInputs.jobTitle, 15);
+    spacer(10);
+
+    // ===== SCORE BLOCK =====
+    const score = clampScore(lastResult.score);
+    const tier = scoreTier(score);
+    let scoreColor;
+    if (tier.className === 'fit-strong') scoreColor = [16, 185, 129];
+    else if (tier.className === 'fit-possible') scoreColor = [217, 119, 6];
+    else scoreColor = [220, 38, 38];
+
+    // Score circle (big number on left, verdict on right)
+    const circleR = 32;
+    const circleX = M + circleR + 4;
+    ensureSpace(circleR * 2 + 16);
+    const circleY = y + circleR;
+    doc.setFillColor.apply(doc, scoreColor);
+    doc.circle(circleX, circleY, circleR, 'F');
+    setFont(22, 'bold');
+    setColor(255, 255, 255);
+    doc.text(String(score), circleX, circleY + 7, { align: 'center' });
+
+    // Verdict text to the right of circle
+    const textX = circleX + circleR + 18;
+    setFont(9, 'bold');
+    setColor(120, 130, 150);
+    doc.text('VERDICT', textX, y + 14);
+    setFont(15, 'bold');
+    setColor.apply(null, scoreColor);
+    doc.text(safeText(lastResult.verdict || tier.defaultVerdict), textX, y + 32);
+
+    if (lastResult.verdict_explanation) {
+      setFont(10, 'normal');
+      setColor(80, 90, 110);
+      const expLines = doc.splitTextToSize(safeText(lastResult.verdict_explanation), contentW - (textX - M) - 4);
+      let ey = y + 48;
+      expLines.forEach(line => { doc.text(line, textX, ey); ey += 13; });
+      y = Math.max(y + circleR * 2, ey) + 10;
+    } else {
+      y = y + circleR * 2 + 12;
+    }
+
+    colorBar(scoreColor[0], scoreColor[1], scoreColor[2], 3);
+
+    // ===== SECTIONS =====
+    function sectionHeading(title, accentRgb) {
+      ensureSpace(40);
+      setFont(11, 'bold');
+      setColor.apply(null, accentRgb);
+      doc.text(safeText(title.toUpperCase()), M, y);
+      y += 8;
+      doc.setDrawColor.apply(doc, accentRgb);
+      doc.setLineWidth(1);
+      doc.line(M, y, M + 30, y);     // short underline accent
       y += 14;
     }
-
-    // Header
-    setFont(18, 'bold');
-    doc.setTextColor(11, 31, 58);
-    writeText('RoleAlign — Job-Fit Report');
-    spacer(2);
-    setFont(10, 'normal');
-    doc.setTextColor(120);
-    writeText(new Date().toLocaleString());
-    spacer(8);
-
-    // Job + score
-    setFont(13, 'bold');
-    doc.setTextColor(11, 31, 58);
-    writeText('Role: ' + lastInputs.jobTitle);
-    spacer(4);
-    setFont(28, 'bold');
-    const tier = scoreTier(clampScore(lastResult.score));
-    if (tier.className === 'fit-strong') doc.setTextColor(16, 185, 129);
-    else if (tier.className === 'fit-possible') doc.setTextColor(217, 119, 6);
-    else doc.setTextColor(220, 38, 38);
-    writeText(clampScore(lastResult.score) + ' / 100  ·  ' + (lastResult.verdict || tier.defaultVerdict));
-    spacer(4);
-    setFont(11, 'normal');
-    doc.setTextColor(60);
-    if (lastResult.verdict_explanation) writeText(lastResult.verdict_explanation);
-    spacer(6);
-    divider();
-
-    function section(title, items, prefix) {
-      setFont(12, 'bold');
-      doc.setTextColor(37, 99, 235);
-      writeText(title.toUpperCase());
-      spacer(2);
-      setFont(11, 'normal');
-      doc.setTextColor(40);
+    function bulletList(items, prefix, prefixColor, emptyMsg) {
       if (!items || items.length === 0) {
-        doc.setTextColor(150);
-        writeText('(none)');
-      } else {
-        items.forEach(item => {
-          writeText(prefix + ' ' + item);
-          spacer(2);
-        });
+        setFont(10, 'italic');
+        setColor(140, 145, 160);
+        writeWrapped(emptyMsg || '(none)', 10);
+        spacer(6);
+        return;
       }
-      spacer(6);
+      setFont(10.5, 'normal');
+      setColor(40, 45, 60);
+      items.forEach(item => {
+        writeIndented(item, 10.5, 18, prefix, prefixColor);
+        spacer(4);
+      });
+      spacer(8);
     }
-    section("What's working in your favor", lastResult.strengths, '✓');
-    section("Where you're light",            lastResult.gaps,      '✗');
-    section('Tailored next steps',           lastResult.suggestions, '→');
 
-    // Keywords
+    sectionHeading("What's working in your favor", [16, 130, 90]);
+    bulletList(lastResult.strengths, '+', [16, 130, 90], 'No strengths surfaced.');
+
+    sectionHeading("Where you're light", [180, 50, 50]);
+    bulletList(lastResult.gaps, 'x', [180, 50, 50], 'No major gaps detected.');
+
+    sectionHeading('Tailored next steps', [37, 99, 235]);
+    bulletList(lastResult.suggestions, '>', [37, 99, 235], 'No specific suggestions.');
+
+    // ===== KEYWORDS =====
     if (lastResult.missing_keywords && lastResult.missing_keywords.length > 0) {
-      setFont(12, 'bold');
-      doc.setTextColor(37, 99, 235);
-      writeText('MISSING KEYWORDS FROM THE JD');
-      spacer(2);
-      setFont(11, 'normal');
-      doc.setTextColor(40);
-      writeText(lastResult.missing_keywords.slice(0, 30).join(' · '));
-      spacer(6);
+      sectionHeading('Missing keywords from the JD', [80, 90, 110]);
+      setFont(10, 'normal');
+      setColor(50, 55, 70);
+      writeWrapped(lastResult.missing_keywords.slice(0, 30).join('  -  '), 10);
+      spacer(8);
     }
 
-    // Footer
-    divider();
-    setFont(9, 'italic');
-    doc.setTextColor(140);
-    writeText('Generated by RoleAlign at arunkumarpanchanana.github.io/role-align — analyses are AI-generated guidance, not gospel.');
+    // ===== FOOTER on last page =====
+    spacer(20);
+    divider([230, 230, 230]);
+    setFont(8, 'italic');
+    setColor(150, 155, 170);
+    writeWrapped('Generated by RoleAlign at arunkumarpanchanana.github.io/Precision-Match. Analyses are AI-generated guidance, not gospel. Apply with judgment.', 8);
+
+    // Page numbers on every page
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      setFont(8, 'normal');
+      setColor(160, 165, 180);
+      doc.text(`Page ${p} of ${totalPages}`, pageW - M, pageH - 24, { align: 'right' });
+      doc.text('RoleAlign', M, pageH - 24);
+    }
 
     const safeTitle = (lastInputs.jobTitle || 'job').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
-    doc.save('rolealign-' + safeTitle + '-' + Date.now() + '.pdf');
+    const fileDate = new Date().toISOString().slice(0, 10);
+    doc.save('rolealign-' + safeTitle + '-' + fileDate + '.pdf');
   });
 </script>
 
